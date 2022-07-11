@@ -1,0 +1,171 @@
+with a as --Total Orders
+(
+select 
+      city
+    ,count(order_id) as totalorders
+
+FROM `efood2022-355816.main_assessment.orders`
+group by city
+)
+,
+b as -- Cities over 1800 orders -- 27 cities
+(
+select city,totalorders
+ from a
+where totalorders > 1000
+order by totalorders desc
+)
+,
+
+c as -- kpis for cities from b
+( 
+select distinct
+       a.city
+      ,case when cuisine = 'Breakfast'   then sum(amount)               else 0 end as BreakfastAmount
+      ,case when cuisine = 'Breakfast'   then count(order_id)           else 0 end as BreakfastOrders
+      ,case when cuisine = 'Breakfast'   then count(distinct(user_id))  else 0 end as BreakfastUsers
+      ,sum(amount)              as OtherAmount
+      ,count(order_id)          as OtherOrders
+      ,count(distinct(user_id)) as OtherUsers
+from `efood2022-355816.main_assessment.orders`  a
+inner join b  b
+on         a.city = b.city
+group by a.city,cuisine
+order by a.city
+)
+,
+l as -- Final for first 2 kpis 
+(
+select
+ city 
+,sum(BreakfastAmount)
+,sum(BreakfastOrders)
+,sum(BreakfastUsers)
+,sum(BreakfastAmount) / nullif(sum(BreakfastOrders),0) as BreakfastBasket
+,sum(BreakfastOrders) / nullif(sum(BreakfastUsers),0) as BreakfastFrequency
+,sum(OtherAmount)
+,sum(OtherOrders)
+,sum(OtherUsers)
+,sum(OtherAmount) / nullif(sum(OtherOrders),0) as OtherBasket
+,sum(OtherOrders) / nullif(sum(OtherUsers),0) as OtherFrequency 
+from c
+group by city
+)
+,
+d as -- Users exceeded 3 orders breakfast
+(
+select 
+a.city,
+user_id,
+case when count(order_id) > 3 then 1 else 0 end as exceedorders
+from `efood2022-355816.main_assessment.orders` a
+inner join b 
+on a.city = b.city
+where cuisine = 'Breakfast'
+group by user_id,city
+having exceedorders = 1
+)
+,
+e as -- Count Users exceeded 3 Order Breakfast 
+(
+select 
+city
+,count(distinct(user_id)) as BreaExcUsers
+from d
+group by city
+)
+,
+f as  -- Count Users Order Breakfast 
+(
+select 
+a.city,
+count(distinct(user_id)) BreakfastUser
+from `efood2022-355816.main_assessment.orders` a
+inner join b 
+on a.city = b.city
+where cuisine = 'Breakfast'
+group by city
+)
+,
+g as -- final for breakfast users exceeded 3 orders
+(
+select distinct
+ a.city 
+,BreaExcUsers 
+,BreakfastUser
+,BreaExcUsers / BreakfastUser as BreaUsers3Orders
+from `efood2022-355816.main_assessment.orders` a
+left join e b
+on a.city = b.city
+left join f c
+on a.city = c.city
+)
+,
+h as -- Users exceeded 3 orders 
+(
+select 
+a.city,
+user_id,
+case when count(order_id) > 3 then 1 else 0 end as exceedorders
+from `efood2022-355816.main_assessment.orders` a
+inner join b 
+on a.city = b.city
+group by user_id,city
+having exceedorders = 1
+)
+,
+i as -- Count Users exceeded 3 Order  
+(
+select 
+city
+,count(distinct(user_id)) as ExcUsers
+from h
+group by city
+)
+,
+j as  -- Count Users Order  
+(
+select 
+city,
+count(distinct(user_id)) User
+from `efood2022-355816.main_assessment.orders`
+--where cuisine <> 'Breakfast'
+group by city
+)
+,
+k as -- final for users exceeded 3 orders
+(
+select distinct
+ a.city 
+,ExcUsers 
+,User
+,ExcUsers / User as Users3Orders
+from `efood2022-355816.main_assessment.orders` a
+left join i b
+on a.city = b.city
+left join j c
+on a.city = c.city
+)
+,
+m as 
+(
+select city
+from b 
+limit 5
+)
+
+select 
+       m.city
+      ,BreakfastBasket
+      ,OtherBasket
+      ,BreakfastFrequency
+      ,OtherFrequency
+      ,BreaUsers3Orders
+      ,Users3Orders
+ from m  
+ left join l
+ on        m.city = l.city
+ left join g
+ on        m.city = g.city
+ left join k
+ on        m.city = k.city
