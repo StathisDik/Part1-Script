@@ -1,0 +1,59 @@
+with a as -- order by amount & city customers
+(
+select 
+city,
+user_id,
+sum(amount) as totalamount,
+count(order_id) as totalorder
+from `efood2022-355816.main_assessment.orders`
+group by city,user_id
+order by city,totalamount desc
+)
+,
+b as  -- Rank customers by city and amount
+(
+select 
+city,
+user_id,
+totalamount,
+totalorder,
+DENSE_RANK() OVER (partition BY city order by totalamount desc) as my_rank
+from a
+)
+,
+c as -- total orders of top 10 users
+(
+select 
+city,
+sum(totalorder) as totalorder10
+from b 
+where my_rank <= 10
+group by city
+)
+,
+d as -- total orders by city
+(
+select 
+city,
+count(order_id) as totalorder
+from `efood2022-355816.main_assessment.orders`
+group by city
+)
+,
+e as -- select distinct cities 
+(
+select distinct 
+city
+from `efood2022-355816.main_assessment.orders`
+)
+
+-- Final Dataset
+select 
+e.city,
+totalorder10 / totalorder
+from e
+left join c
+on e.city = c.city
+left join d
+on e.city = d.city
+
